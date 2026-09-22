@@ -1,0 +1,14 @@
+node_modules/
+client/node_modules/
+client/dist/
+data/
+.env
+.env.local
+*.db
+*.db-*
+.DS_Store
+Release/*.zip
+Release/*.tar.gz
+*.log
+.chrome-profile/
+chrome-profile/

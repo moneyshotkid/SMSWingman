@@ -1,0 +1,36 @@
+{
+  "name": "smswingman",
+  "version": "1.0.0",
+  "description": "Personal SMS dating coach over Google Voice + Moonshot kimi-k3",
+  "type": "module",
+  "bin": {
+    "gv-sms": "./send-gv-sms.mjs"
+  },
+  "scripts": {
+    "gv": "node send-gv-sms.mjs",
+    "login": "node send-gv-sms.mjs login",
+    "check": "node send-gv-sms.mjs check",
+    "server": "node server/index.js",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "npm run dev --prefix client",
+    "dev": "concurrently -n server,client -c green,cyan \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "npm run build --prefix client",
+    "start": "node server/index.js",
+    "postinstall": "npm install --prefix client"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.19.0",
+    "openai": "^4.77.0",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
