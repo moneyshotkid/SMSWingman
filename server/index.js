@@ -4,7 +4,8 @@ import { config as loadEnv } from "dotenv";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb, getSettings, setSettings, nowIso } from "./db.js";
-import { normalizePhone, checkLogin } from "../lib/google-voice.mjs";
+import { normalizePhone } from "../lib/google-voice.mjs";
+import { getGvDeskStatus, restartGvChrome } from "./services/gv-desk.js";
 import {
   syncAllTargets,
   syncTarget,
@@ -72,11 +73,28 @@ function targetRow(row) {
 }
 
 app.get("/api/gv/status", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
   try {
-    const loggedIn = await checkLogin();
-    res.json({ loggedIn });
+    const status = await getGvDeskStatus();
+    res.json(status);
   } catch (err) {
     res.status(500).json({ loggedIn: false, error: err.message });
+  }
+});
+
+// Opt-in, session-authenticated. The command is a fixed script or a validated
+// systemd unit — the request body cannot choose what runs.
+app.post("/api/gv/chrome/restart", async (req, res) => {
+  if (req.body?.confirm !== true) {
+    return res.status(400).json({
+      error: 'Send { "confirm": true } to restart GV Chrome.',
+    });
+  }
+  try {
+    const result = await restartGvChrome();
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

@@ -183,7 +183,9 @@ export async function syncTarget(db, targetId, { generate = true } = {}) {
 export async function syncAllTargets(db) {
   const loggedIn = await checkLogin();
   if (!loggedIn) {
-    throw new Error("Google Voice is not logged in. Run: npm run login");
+    throw new Error(
+      "GV is not signed in. Open Reconnect GV in Wingman, or run npm run login on the server.",
+    );
   }
 
   const targets = db.prepare("SELECT * FROM targets ORDER BY updated_at DESC").all();

@@ -85,7 +85,7 @@ Paths below use `/opt/SMSWingman`. Change them if you want.
 - **Node.js 18+**
 - Google **Chrome** (or Chromium the scripts can launch)
 - An **OpenAI-compatible** LLM API key (OpenAI, Groq, Together, local gateway, etc.)
-- A VNC client on your laptop (TigerVNC, RealVNC Viewer, TightVNC, …)
+- A VNC client on your laptop (TigerVNC, RealVNC Viewer, TightVNC, …), or just a browser once **Reconnect GV** is running
 
 ## 1. SSH in and update the box
 
@@ -98,7 +98,7 @@ sudo apt update && sudo apt upgrade -y
 
 ```bash
 sudo apt install -y git curl build-essential python3 \
-  xvfb x11vnc \
+  xvfb x11vnc novnc websockify \
   fonts-liberation libnss3 libatk-bridge2.0-0 libgtk-3-0 \
   libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
   libasound2t64 || sudo apt install -y libasound2
@@ -164,6 +164,9 @@ DISPLAY=:99
 GV_PROFILE=/home/YOUR_LINUX_USER/.google-voice-sms/chrome-profile
 GV_DEBUG_PORT=9222
 
+# Desktop embedded on Reconnect GV. See "Reconnect GV inside Wingman" below.
+# GV_NOVNC_URL=http://127.0.0.1:6080/
+
 # When you put HTTPS in front (Tailscale Serve, Caddy, Cloudflare Tunnel, …):
 # COOKIE_SECURE=1
 ```
@@ -172,7 +175,7 @@ Notes:
 
 - `AUTH_*` = login for the **SMSWingman website**, not Google.
 - `LLM_API_KEY` + `LLM_BASE_URL` + `LLM_MODEL` seed System Settings for any OpenAI-compatible provider. You can also paste/change all of this later under **System Settings** in the UI.
-- Never expose Chrome debug port **9222** or VNC **5900** to the public internet.
+- Never expose Chrome debug port **9222**, VNC **5900**, or noVNC **6080** to the public internet.
 
 ## 6. Start the virtual display + Chrome (GV session home)
 
@@ -184,12 +187,20 @@ chmod +x scripts/*.sh
 # or: ./scripts/start-gv-chrome.sh
 ```
 
-Attach VNC to that same display (**localhost only** on the VPS):
+Attach VNC to that same display (**localhost only** on the VPS), then expose it to the browser with noVNC:
 
 ```bash
 pgrep -x x11vnc >/dev/null || \
   x11vnc -display :99 -rfbport 5900 -localhost -nopw -forever -shared &
+
+# Browser viewer used by Wingman's Reconnect GV page. Also localhost only.
+pgrep -f "websockify .*6080" >/dev/null || \
+  websockify --web /usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900 &
 ```
+
+`/usr/share/novnc` is the usual Debian/Ubuntu path. If `websockify` is missing, install the `novnc` and `websockify` packages from step 2.
+
+You can sign in with a normal VNC client (steps 7–8) or, once Wingman itself is running, from **Reconnect GV** in the web UI (`/gv-login`). The in-app page is the one that works on a phone. See [Reconnect GV inside Wingman](#reconnect-gv-inside-wingman).
 
 ## 7. Tunnel VNC from your laptop
 
@@ -260,6 +271,8 @@ Open `http://YOUR_VPS_IP:8787` (or better: put **Caddy/nginx + HTTPS**, or **Tai
 
 Log in with `AUTH_USER` / `AUTH_PASSWORD`.
 
+If the sidebar says **GV not signed in**, use the **Reconnect GV** banner — don't keep hitting Pull and wondering why nothing happens.
+
 Dev mode (hot reload) if you're hacking on the box:
 
 ```bash
@@ -286,7 +299,7 @@ npm run gv -- read --from +15551234567 --json
 
 ## 13. Keep it alive (optional)
 
-Use `systemd`, `pm2`, or your favorite process manager for `npm start`, Xvfb/Chrome, and `x11vnc`. After a reboot you'll usually need display + Chrome (+ VNC if you're logging in again) before Wingman can talk to GV.
+Use `systemd`, `pm2`, or your favorite process manager for `npm start`, Xvfb/Chrome, `x11vnc`, and `websockify`. After a reboot you'll usually need display + Chrome (+ noVNC if you're signing in again) before Wingman can talk to GV.
 
 Example sketch with pm2:
 
@@ -301,9 +314,31 @@ pm2 save
 
 ---
 
+## Reconnect GV inside Wingman
+
+When the GV session expires you do not need a separate VNC app. Sign in inside Wingman:
+
+1. Open the app and sign in with `AUTH_USER` / `AUTH_PASSWORD`.
+2. Go to **Settings → Reconnect GV**, tap the **GV not signed in** banner, or open `/gv-login` directly.
+3. The page embeds the noVNC desktop (`GV_NOVNC_URL`, default `http://127.0.0.1:6080/`). The server turns that into `vnc.html` with **`resize=scale`**.
+4. Sign in on that desktop (2FA included). The page polls `GET /api/gv/status` and the banner clears once `loggedIn` is true.
+
+**Hand tool.** `resize=scale` fits the whole remote screen in the iframe. noVNC's hand/pan tool is intentionally unused in that mode — panning is only for an unscaled desktop that is larger than the browser. Leave the noVNC scaling control on **Scale**. On a phone, pinch-zoom the browser if you need a closer look; don't switch scaling to None or you'll get the hand tool back.
+
+**`GV_NOVNC_URL`.** `http://127.0.0.1:6080/` is the websockify port on the machine running Wingman. That is correct when the browser is on that same machine. From a phone, `127.0.0.1` is the phone, so the embed will be blank. Either:
+
+- Set an absolute URL the phone can open, usually over Tailscale: `GV_NOVNC_URL=http://wingman.tailnet.ts.net:6080/` (still do not publish 6080 on the public internet), or
+- Reverse-proxy noVNC onto the same origin as Wingman and use a relative path: `GV_NOVNC_URL=/novnc/`. The server then loads `/novnc/vnc.html` and sets the websocket `path` to `novnc/websockify` unless you already set `path`. Proxy WebSocket upgrades, not just HTTP. If Wingman is HTTPS, the embed has to be HTTPS or that relative path — browsers block an `http://` iframe on an `https://` page.
+
+`GET /api/gv/status` (session login required) returns `{ loggedIn, phase, cdpReady, novncUrl, scaling: "scale", chromeRestart, checkedAt }`. `loggedIn` uses the same `isLoggedIn` check as `npm run check`. The poll does **not** navigate a tab that is already on a Google sign-in screen. A blank window is opened onto GV messages, and if Chrome's debug port is down the status check starts it.
+
+**Restart button (optional, off by default).** Set `GV_CHROME_RESTART=1` to show **Restart GV Chrome**. It is behind the same Wingman login as the rest of the API and only runs `scripts/restart-gv-chrome.sh`, or `systemctl restart` on `GV_CHROME_SYSTEMD_UNIT` when that is set. The unit name is checked against a safe pattern; the browser cannot pass a command. `scripts/start-gv-chrome.sh` is the boot helper — it exits immediately when Chrome is already listening, so the button does not use it. There is no `sudo`. If you don't set the flag, the page tells you to run the restart script over SSH.
+
+---
+
 ## Security (non-negotiable)
 
-- **Do not** publish ports **9222** (Chrome CDP) or **5900** (VNC) on the open internet. Localhost + SSH tunnel (or Tailscale) only.
+- **Do not** publish ports **9222** (Chrome CDP), **5900** (VNC), or **6080** (noVNC) on the open internet. Localhost + SSH tunnel (or Tailscale) only. Wingman's login does not protect the noVNC port itself.
 - Put a real password on `AUTH_PASSWORD`. Prefer HTTPS before you leave the LAN.
 - This scrapes a consumer messaging UI. Treat account risk seriously.
 
@@ -314,7 +349,8 @@ pm2 save
 | Problem | What to try |
 |---------|-------------|
 | `npm` not found | Reinstall Node 18+ and open a new shell |
-| GV login / "browser not secure" | Finish Google sign-in **by hand in VNC Chrome**, including 2FA |
+| GV login / "browser not secure" | Finish sign-in **by hand** in Reconnect GV or a VNC client, including 2FA |
+| Reconnect GV iframe is blank on a phone | `GV_NOVNC_URL` is still `127.0.0.1` — use a Tailscale URL or `/novnc/` (see above). Confirm `websockify` is listening on 6080 |
 | Marketing page instead of Messages | Wrong Google account / not fully in GV — fix in VNC, then `npm run login` again |
 | `check` fails | `export DISPLAY=:99` then `npm run login` / `npm run check` |
 | `page.goto` timeout | Restart `./scripts/restart-gv-chrome.sh`; confirm CDP on 9222 |

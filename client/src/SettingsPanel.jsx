@@ -12,7 +12,7 @@ const EMPTY = {
   compact_when_over: "40",
 };
 
-export default function SettingsPanel({ onSaved, onError }) {
+export default function SettingsPanel({ onSaved, onError, onReconnect }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
 
@@ -51,6 +51,16 @@ export default function SettingsPanel({ onSaved, onError }) {
         </div>
       </div>
       <div className="panel">
+        <div className="card" style={{ maxWidth: 760 }}>
+          <h3>GV session</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            When the GV session expires, sign in on the desktop inside Wingman instead of a separate
+            VNC app.
+          </p>
+          <button className="btn btn-primary" type="button" onClick={onReconnect}>
+            Reconnect GV
+          </button>
+        </div>
         <form className="card form-grid" onSubmit={save} style={{ maxWidth: 760 }}>
           <label>
             About you (self context)
