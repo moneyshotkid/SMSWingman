@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export DISPLAY="${DISPLAY:-:99}"
-PROF="${GV_PROFILE:-/home/bitnami/.google-voice-sms/chrome-profile}"
+PROF="${GV_PROFILE:-$HOME/.google-voice-sms/chrome-profile}"
 PORT="${GV_DEBUG_PORT:-9222}"
 
 if ! pgrep -x Xvfb >/dev/null 2>&1; then
@@ -32,7 +32,7 @@ nohup google-chrome-stable \
   --disable-dev-shm-usage \
   --disable-gpu \
   --window-size=1280,900 \
-  about:blank \
+  https://voice.google.com/u/0/messages \
   >/tmp/chrome-gv.log 2>&1 &
 
 for i in $(seq 1 40); do

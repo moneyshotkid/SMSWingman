@@ -15,6 +15,7 @@
     "dev:client": "npm run dev --prefix client",
     "dev": "concurrently -n server,client -c green,cyan \"npm run dev:server\" \"npm run dev:client\"",
     "build": "npm run build --prefix client",
+    "test": "node --test lib/novnc-url.test.mjs",
     "start": "node server/index.js",
     "postinstall": "npm install --prefix client"
   },

@@ -12,7 +12,7 @@ const EMPTY = {
   compact_when_over: "40",
 };
 
-export default function SettingsPanel({ onSaved, onError }) {
+export default function SettingsPanel({ onSaved, onError, onReconnect, onAutofill, autofillBusy }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
 
@@ -51,6 +51,26 @@ export default function SettingsPanel({ onSaved, onError }) {
         </div>
       </div>
       <div className="panel">
+        <div className="card" style={{ maxWidth: 760 }}>
+          <h3>GV session</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            When the GV session expires, autofill the sign-in and finish 2FA in the portal, or open
+            the desktop inside Wingman instead of a separate VNC app.
+          </p>
+          <div className="row">
+            <button
+              className="btn btn-reconnect-gv"
+              type="button"
+              disabled={autofillBusy}
+              onClick={onAutofill}
+            >
+              {autofillBusy ? "Signing in…" : "Reconnect Google Voice"}
+            </button>
+            <button className="btn btn-primary" type="button" onClick={onReconnect}>
+              Open GV desktop
+            </button>
+          </div>
+        </div>
         <form className="card form-grid" onSubmit={save} style={{ maxWidth: 760 }}>
           <label>
             About you (self context)

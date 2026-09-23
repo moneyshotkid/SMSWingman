@@ -3,6 +3,9 @@ import { api } from "./api.js";
 import SettingsPanel from "./SettingsPanel.jsx";
 import TargetPanel from "./TargetPanel.jsx";
 import LoginPage from "./LoginPage.jsx";
+import GvLoginPage from "./GvLoginPage.jsx";
+
+const GV_LOGIN_PATH = "/gv-login";
 
 function gvPortalUrl() {
   const { protocol, hostname } = window.location;
@@ -20,7 +23,9 @@ export default function App() {
   const [authConfigured, setAuthConfigured] = useState(true);
   const [authUser, setAuthUser] = useState(null);
 
-  const [view, setView] = useState("inbox");
+  const [view, setView] = useState(() =>
+    window.location.pathname === GV_LOGIN_PATH ? "gv" : "inbox",
+  );
   const [targets, setTargets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [gvOk, setGvOk] = useState(null);
@@ -34,7 +39,11 @@ export default function App() {
   const [showNew, setShowNew] = useState(false);
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
-  const [navOpen, setNavOpen] = useState(true);
+  const [navOpen, setNavOpen] = useState(() => {
+    const mobile = window.matchMedia("(max-width: 860px)").matches;
+    if (mobile && window.location.pathname === GV_LOGIN_PATH) return false;
+    return true;
+  });
 
   const locked = busy || booting;
   const lockLabel = booting ? "Loading…" : busyMessage || "Working…";
@@ -138,12 +147,31 @@ export default function App() {
     if (authenticated) loadApp();
   }, [authenticated, loadApp]);
 
+  useEffect(() => {
+    const onPop = () => {
+      setView(window.location.pathname === GV_LOGIN_PATH ? "gv" : "inbox");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated || view === "gv") return undefined;
+    const id = window.setInterval(() => {
+      refreshGv();
+    }, 45000);
+    return () => window.clearInterval(id);
+  }, [authenticated, view, refreshGv]);
+
   // On phones, collapse the people nav once a chat is open
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 860px)");
     const apply = () => {
-      if (mq.matches && selectedId && view === "inbox") setNavOpen(false);
-      if (!mq.matches) setNavOpen(true);
+      if (!mq.matches) {
+        setNavOpen(true);
+        return;
+      }
+      if (view === "gv" || (selectedId && view === "inbox")) setNavOpen(false);
     };
     apply();
     mq.addEventListener("change", apply);
@@ -169,6 +197,35 @@ export default function App() {
     setSelectedId(null);
     setGvOk(null);
     setView("inbox");
+    if (window.location.pathname === GV_LOGIN_PATH) {
+      window.history.pushState({}, "", "/");
+    }
+  };
+
+  const reportError = useCallback((msg) => {
+    const text = msg || "";
+    setError(text);
+    if (/GV is not signed in|Not signed in to GV|not logged in/i.test(text)) {
+      setGvOk(false);
+    }
+  }, []);
+
+  const openGvLogin = () => {
+    if (locked) return;
+    if (window.location.pathname !== GV_LOGIN_PATH) {
+      window.history.pushState({ view: "gv" }, "", GV_LOGIN_PATH);
+    }
+    setError("");
+    setView("gv");
+    setNavOpen(false);
+  };
+
+  const leaveGvLogin = (next = "inbox") => {
+    if (window.location.pathname === GV_LOGIN_PATH) {
+      window.history.pushState({ view: next }, "", "/");
+    }
+    setView(next);
+    refreshGv();
   };
   const onSyncAll = async () => {
     if (locked) return;
@@ -188,7 +245,7 @@ export default function App() {
           : "Synced. No new inbound messages.",
       );
     } catch (err) {
-      setError(err.message);
+      reportError(err.message);
     } finally {
       stopBusy();
     }
@@ -209,11 +266,14 @@ export default function App() {
       setShowNew(false);
       await refreshTargets();
       setSelectedId(result.target.id);
+      if (window.location.pathname === GV_LOGIN_PATH) {
+        window.history.pushState({ view: "inbox" }, "", "/");
+      }
       setView("inbox");
       setNavOpen(false);
       if (result.syncError) {
         flash(`Added — sync failed: ${result.syncError}`);
-        setError(result.syncError);
+        reportError(result.syncError);
       } else {
         const n = result.sync?.messageCount || 0;
         const inbound = result.sync?.newInboundCount || 0;
@@ -224,7 +284,7 @@ export default function App() {
         );
       }
     } catch (err) {
-      setError(err.message);
+      reportError(err.message);
     } finally {
       stopBusy();
     }
@@ -232,6 +292,9 @@ export default function App() {
 
   const openChat = (id) => {
     if (locked) return;
+    if (window.location.pathname === GV_LOGIN_PATH) {
+      window.history.pushState({ view: "inbox" }, "", "/");
+    }
     setSelectedId(id);
     setView("inbox");
     if (window.matchMedia("(max-width: 860px)").matches) setNavOpen(false);
@@ -246,16 +309,16 @@ export default function App() {
       window.open(gvPortalUrl(), "_blank", "noopener,noreferrer");
       if (result.status === "already_logged_in") {
         setGvOk(true);
-        setToast("Google Voice already signed in");
+        flash("Google Voice already signed in");
       } else if (
         String(result.status || "").includes("2fa") ||
         String(result.status || "").includes("awaiting")
       ) {
-        setToast("Email/password filled — finish 2FA in the portal");
+        flash("Email/password filled — finish 2FA in the portal");
       } else if (result.ok) {
-        setToast("Autofill ran — check the portal");
+        flash("Autofill ran — check the portal");
       } else {
-        setToast(`Autofill: ${result.status || "check portal"}`);
+        flash(`Autofill: ${result.status || "check portal"}`);
       }
       setTimeout(() => {
         refreshGv().catch(() => {});
@@ -302,15 +365,21 @@ export default function App() {
               SMS<span>Wingman</span>
             </h1>
           </div>
-          <div className="status-pill" title="Google Voice session">
-            <span className={`status-dot ${gvOk ? "on" : ""}`} />
+          <button
+            type="button"
+            className={`status-pill ${gvOk === false ? "is-off" : ""}`}
+            title={gvOk === false ? "Open the GV desktop" : "GV session"}
+            disabled={locked}
+            onClick={openGvLogin}
+          >
+            <span className={`status-dot ${gvOk ? "on" : ""} ${gvOk === false ? "off" : ""}`} />
             <span className="status-label status-label-short">
               {gvOk ? "GV on" : gvOk === false ? "GV off" : "…"}
             </span>
             <span className="status-label status-label-full">
-              Google Voice {gvOk ? "connected" : gvOk === false ? "not logged in" : "…"}
+              GV {gvOk ? "connected" : gvOk === false ? "not signed in" : "…"}
             </span>
-          </div>
+          </button>
           {gvOk === false && (
             <button
               type="button"
@@ -342,7 +411,11 @@ export default function App() {
             className={`btn btn-settings ${view === "settings" ? "btn-primary" : ""}`}
             disabled={locked}
             onClick={() => {
-              setView(view === "settings" ? "inbox" : "settings");
+              const next = view === "settings" ? "inbox" : "settings";
+              if (window.location.pathname === GV_LOGIN_PATH) {
+                window.history.pushState({ view: next }, "", "/");
+              }
+              setView(next);
               setNavOpen(true);
             }}
           >
@@ -424,17 +497,50 @@ export default function App() {
       )}
 
       <main className="main">
-        {error && <div className="error-banner">{error}</div>}
+        {error && view !== "gv" && <div className="error-banner">{error}</div>}
 
-        {view === "settings" ? (
-          <SettingsPanel onSaved={flash} onError={setError} />
+        {gvOk === false && view !== "gv" && (
+          <div className="gv-cta-banner" role="status">
+            <div>
+              <strong>GV is signed out.</strong>{" "}
+              <span>
+                Autofill the sign-in and finish 2FA in the portal, or open the GV desktop here.
+              </span>
+            </div>
+            <div className="gv-cta-actions">
+              <button
+                className="btn btn-reconnect-gv"
+                type="button"
+                disabled={locked || gvReconnecting}
+                onClick={onReconnectGv}
+              >
+                <span className="label-full">{gvReconnecting ? "Signing in…" : "Reconnect Google Voice"}</span>
+                <span className="label-short">{gvReconnecting ? "…" : "Reconnect GV"}</span>
+              </button>
+              <button className="btn btn-primary" type="button" disabled={locked} onClick={openGvLogin}>
+                Open GV desktop
+              </button>
+            </div>
+          </div>
+        )}
+
+        {view === "gv" ? (
+          <GvLoginPage onBack={() => leaveGvLogin("inbox")} onStatus={setGvOk} />
+        ) : view === "settings" ? (
+          <SettingsPanel
+            onSaved={flash}
+            onError={reportError}
+            onReconnect={openGvLogin}
+            onAutofill={onReconnectGv}
+            autofillBusy={gvReconnecting}
+          />
         ) : selected ? (
           <TargetPanel
             key={selected.id}
             targetId={selected.id}
             onTargetsChanged={refreshTargets}
             onToast={flash}
-            onError={setError}
+            onError={reportError}
             onOpenNav={() => setNavOpen(true)}
             onBusyChange={onPanelBusy}
             interactionLocked={locked}
