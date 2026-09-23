@@ -187,7 +187,7 @@ export default function TargetPanel({
 
   const syncOne = async () => {
     if (locked) return;
-    beginGvBusy("Syncing with Google Voice…");
+    beginGvBusy("Syncing with GV…");
     onError("");
     try {
       const result = await api.syncTarget(target.id);
@@ -233,7 +233,7 @@ export default function TargetPanel({
 
   const sendDraft = async (draftId) => {
     if (locked) return;
-    beginGvBusy("Sending via Google Voice…");
+    beginGvBusy("Sending via GV…");
     onError("");
     try {
       await api.sendDraft(draftId, edits[draftId]);
@@ -241,7 +241,7 @@ export default function TargetPanel({
       setEdits({});
       await load({ withBusy: false });
       await onTargetsChanged();
-      onToast("Sent via Google Voice");
+      onToast("Sent via GV");
     } catch (err) {
       onError(err.message);
     } finally {
@@ -254,7 +254,7 @@ export default function TargetPanel({
     if (locked) return;
     const text = compose.trim();
     if (!text) return;
-    beginGvBusy("Sending via Google Voice…");
+    beginGvBusy("Sending via GV…");
     onError("");
     try {
       const result = await api.sendMessage(target.id, text);
@@ -264,7 +264,7 @@ export default function TargetPanel({
       setMessages(result.messages || []);
       setTarget(result.target);
       await onTargetsChanged();
-      onToast("Sent via Google Voice");
+      onToast("Sent via GV");
     } catch (err) {
       onError(err.message);
     } finally {
@@ -501,7 +501,7 @@ export default function TargetPanel({
             <div className="thread">
               {messages.length === 0 && (
                 <p className="muted" style={{ textAlign: "center" }}>
-                  No messages yet. Sync this thread from Google Voice.
+                  No messages yet. Sync this thread from GV.
                 </p>
               )}
               {messages.map((m, i) => (

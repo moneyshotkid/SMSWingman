@@ -1,7 +1,7 @@
 {
   "name": "smswingman",
   "version": "1.0.0",
-  "description": "Personal SMS dating coach over Google Voice + Moonshot kimi-k3",
+  "description": "Personal SMS dating wingman over GV + any OpenAI-compatible LLM",
   "type": "module",
   "bin": {
     "gv-sms": "./send-gv-sms.mjs"

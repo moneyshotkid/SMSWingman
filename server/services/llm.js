@@ -2,20 +2,20 @@ import OpenAI from "openai";
 import { getSettings } from "../db.js";
 
 function clientFromSettings(settings) {
-  const apiKey = settings.moonshot_api_key || process.env.MOONSHOT_API_KEY || "";
+  const apiKey = settings.moonshot_api_key || process.env.LLM_API_KEY || process.env.MOONSHOT_API_KEY || "";
   if (!apiKey) {
-    throw new Error("Moonshot API key missing. Set it in System Settings or MOONSHOT_API_KEY.");
+    throw new Error("LLM API key missing. Set it in System Settings or LLM_API_KEY.");
   }
   return new OpenAI({
     apiKey,
-    baseURL: settings.llm_base_url || "https://api.moonshot.ai/v1",
+    baseURL: settings.llm_base_url || process.env.LLM_BASE_URL || "https://api.openai.com/v1",
   });
 }
 
 export async function chatCompletion(db, { messages }) {
   const settings = getSettings(db);
   const client = clientFromSettings(settings);
-  const model = settings.llm_model || "kimi-k3";
+  const model = settings.llm_model || process.env.LLM_MODEL || "gpt-4o-mini";
   const params = {
     model,
     messages,

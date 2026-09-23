@@ -1,236 +1,327 @@
 # SMSWingman
 
-A personal SMS “wingman” for [Google Voice](https://voice.google.com).
+**For the chronic texter.** You know who you are. The triple-text. The "just checking in!!!" The essay at 1:47 AM that somehow made you look *needier* than the last one. SMSWingman is the wingman you wish you'd had before you typed yourself out of getting laid.
 
-Pull in your text threads, get **three reply drafts** from an AI (Moonshot / Kimi), edit the one you like, and send it back through Google Voice—without typing everything yourself.
+It sits between you and your texts: pulls threads in, drafts replies that don't scream anxious attachment, lets you tweak them, and sends. Built for dating-game SMS — including PUA-style flows out of the box — without turning you into a spam cannon.
 
-Google Voice has **no public SMS API**. SMSWingman opens Google Chrome and uses the normal Voice website for you.
+> **Honest pitch:** this is a **hack**. Real carrier SMS APIs in the US are a compliance maze (10DLC, consent, carriers, money). Access is annoying on purpose. So this project scrapes a consumer web inbox we call **GV** instead. It works. If you're technical, you can run it for practically nothing. Messages are **not** true real-time (though you can bolt on notifications). Sync / send / receive take a beat, and when GV's website changes, things can break. Help fix it when they do.
 
-> **Personal, one-to-one use only.** Do not use this for spam, mass marketing, or blasting many numbers. That can get your Google Voice number limited or banned. For business SMS, use a real provider such as [Twilio](https://www.twilio.com/).
-
----
-
-## What you need (requirements)
-
-You can run this on a normal Windows, Mac, or Linux computer.
-
-| Requirement | Notes |
-|-------------|--------|
-| **Google Voice number** | Already set up in your Google account |
-| **Google Chrome** | [Download Chrome](https://www.google.com/chrome/) |
-| **Node.js 18 or newer** | [Download Node LTS](https://nodejs.org/) (includes `npm`) |
-| **Moonshot API key** | From [Moonshot / Kimi](https://platform.moonshot.ai/) — used to generate reply drafts |
-| **Internet** | Needed for Voice and the AI API |
-
-Optional later: a small cloud VPS (about **2 GB RAM** or more if Chrome stays open). First-time Google login on a server is harder than on your home PC.
-
-You do **not** need WAMP/Apache for the app itself—Node runs it. This folder often lives under `C:\wamp\www\` only because that is a convenient place on Windows.
+**Personal, one-to-one use only.** Not for spam, mass outreach, or blasting strangers. Consent and local law still apply. For real business SMS, use a proper provider — this is the cheap workaround for humans who text humans.
 
 ---
 
-## Quick setup (average computer)
+# Part 1 — Why this exists (and who it's for)
 
-### 1. Get the code
+## Who it's for
 
-Download or clone this project, then open a terminal **in the project folder**.
+- **Chronic texters** who turn chemistry into a support-group chat
+- People who want **better SMS game** without hiring a coach for every reply
+- Technically inclined folks who want a **dating SMS cockpit** for nearly free
+- Anyone who already has a **GV** number and an OpenAI-compatible LLM key
 
-Example on Windows:
+## What it does for your SMS dating game
 
-```bat
-cd C:\wamp\www\SMSWingman
+| Feature | Why you care |
+|--------|----------------|
+| **Three reply drafts** | Pick the chill one, not the "hey did u get my last 4 msgs" one |
+| **System-wide chatbot personality** | Teach it *you*: age, work, interests, vibe, hard rules |
+| **PUA-ready defaults** | Tuned for dating SMS; change the system prompt if that's not your scene |
+| **Per-target sculpting** | Tone, style, length, "push for date," custom instructions per person |
+| **Per-target memory** | Remembers each conversation; auto-managed; **you can edit it** |
+| **Response delay** | Optional wait before send so you don't look like you live in their inbox |
+| **Pull / sync / send via GV** | No official SMS API required — browser automation does the clicking |
+| **Local SQLite + web UI** | Your threads and drafts on your box, behind a simple login |
+| **CLI helpers** | `npm run login`, `npm run check`, send/read via the same GV session |
+
+### How a night usually goes
+
+1. Someone texts you (on your phone / GV).
+2. You open SMSWingman → **Pull messages** (or sync that person).
+3. New inbound lands; the LLM returns **three** styled drafts.
+4. Edit the one that sounds like a person you'd want to date → **Send**.
+5. Optional delay so you're not instantaneous.
+6. Long threads get **compacted** into an editable memory summary so the model stays sharp.
+
+You stay in control. The bot suggests. You hit send.
+
+### The catch (read this so you're not surprised)
+
+- **Not real-time.** Syncing and sending scrape a web UI. Expect seconds to tens of seconds, not Instant Messenger magic. There *are* ways to get notified faster (watchers, hooks, your own alerts) — community welcome.
+- **It can break.** GV's site changes. Selectors die. PRs that fix scrapes are love.
+- **Hardest steps:** standing up a Linux VPS + logging into GV remotely (VNC). After that, it's a breeze.
+- **It's still a hack.** Cheap and clever ≠ carrier-grade. Treat it like a power tool, not a bank.
+
+### Technically savvy? Nearly free
+
+A small VPS, Node, Chrome, an OpenAI-compatible API key, and an evening of setup. No SMS aggregator bill. No 10DLC saga. Just you, a VM, and slightly better texts.
+
+If this thing helps you get laid: **show some love** (tip / donate / hire me — details below). I built it, I need work, and paid installs keep the lights on.
+
+### Want it installed for you?
+
+Don't want to fight Xvfb and VNC? Hire me.
+
+**Nick Nguyen** · Internet Technology Services · Dana Point / Orange County, CA
+
+- Website: [internettechnologyservices.com](https://internettechnologyservices.com)
+- Email: [Its@Internettechnologyservices.com](mailto:Its@Internettechnologyservices.com)
+- Office: (949) 446-1716
+- LinkedIn: [linkedin.com/in/itsnicknguyen](https://www.linkedin.com/in/itsnicknguyen/)
+
+Subject line: **SMSWingman setup** (or "I got a date, here's a tip"). Freelance web / AI / cloud work welcome too.
+
+---
+
+# Part 2 - Install on a Linux VPS (start to finish)
+
+This path assumes a fresh-ish **Ubuntu/Debian VPS** (~ **2 GB RAM+** recommended; Chrome is hungry), SSH access as a normal user with `sudo`, and that you'll log into **GV** once through **VNC**.
+
+Paths below use `/opt/SMSWingman`. Change them if you want.
+
+## 0. What you need before you start
+
+- A VPS with a public IP (or Tailscale)
+- A **GV** number on a Google account you can sign into (2FA ok)
+- **Node.js 18+**
+- Google **Chrome** (or Chromium the scripts can launch)
+- An **OpenAI-compatible** LLM API key (OpenAI, Groq, Together, local gateway, etc.)
+- A VNC client on your laptop (TigerVNC, RealVNC Viewer, TightVNC, …)
+
+## 1. SSH in and update the box
+
+```bash
+ssh you@YOUR_VPS_IP
+sudo apt update && sudo apt upgrade -y
 ```
 
-### 2. Install packages
+## 2. Install system packages
+
+```bash
+sudo apt install -y git curl build-essential python3 \
+  xvfb x11vnc \
+  fonts-liberation libnss3 libatk-bridge2.0-0 libgtk-3-0 \
+  libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
+  libasound2t64 || sudo apt install -y libasound2
+```
+
+Install **Google Chrome** (stable):
+
+```bash
+curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+  | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+  | sudo tee /etc/apt/sources.list.d/google-chrome.list
+sudo apt update
+sudo apt install -y google-chrome-stable
+```
+
+Install **Node.js 20 LTS**:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v && npm -v
+```
+
+## 3. Clone the repo
+
+```bash
+sudo mkdir -p /opt/SMSWingman
+sudo chown "$USER":"$USER" /opt/SMSWingman
+git clone https://github.com/moneyshotkid/SMSWingman.git /opt/SMSWingman
+cd /opt/SMSWingman
+```
+
+## 4. Install app dependencies
 
 ```bash
 npm install
 ```
 
-This also installs the web UI (`client`) automatically.
+(`postinstall` also installs the `client` UI packages.)
 
-### 3. Create your settings file
-
-```bat
-copy .env.example .env
-```
-
-Mac / Linux:
+## 5. Create `.env`
 
 ```bash
 cp .env.example .env
+nano .env   # or vim / whatever
 ```
 
-Open `.env` in Notepad (or any editor) and set at least:
+Minimum:
 
 ```env
 AUTH_USER=admin
 AUTH_PASSWORD=pick-a-strong-password
 SESSION_SECRET=paste-a-long-random-string-here
 
-MOONSHOT_API_KEY=sk-your-key-here
+# OpenAI-compatible LLM (seeds System Settings; also editable in the UI)
+LLM_API_KEY=sk-your-openai-compatible-key
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
 
 PORT=8787
+DISPLAY=:99
+GV_PROFILE=/home/YOUR_LINUX_USER/.google-voice-sms/chrome-profile
+GV_DEBUG_PORT=9222
+
+# When you put HTTPS in front (Tailscale Serve, Caddy, Cloudflare Tunnel, …):
+# COOKIE_SECURE=1
 ```
 
-Tips:
+Notes:
 
-- `AUTH_USER` / `AUTH_PASSWORD` — login for the SMSWingman website (not Google).
-- `SESSION_SECRET` — any long random string (password manager “generate password” works).
-- You can also paste the Moonshot key later under **Settings** in the app.
-- If you put the app behind HTTPS (Cloudflare Tunnel, etc.), add `COOKIE_SECURE=1`.
+- `AUTH_*` = login for the **SMSWingman website**, not Google.
+- `LLM_API_KEY` + `LLM_BASE_URL` + `LLM_MODEL` seed System Settings for any OpenAI-compatible provider. You can also paste/change all of this later under **System Settings** in the UI.
+- Never expose Chrome debug port **9222** or VNC **5900** to the public internet.
 
-### 4. Sign into Google Voice once
-
-```bash
-npm run login
-```
-
-Chrome opens. Sign into the **Google account that owns your Voice number** (complete 2FA if asked). When you see Messages, you are done.
-
-Check that it worked:
+## 6. Start the virtual display + Chrome (GV session home)
 
 ```bash
-npm run check
-```
-
-### 5. Start the app
-
-**While developing** (API + web UI with hot reload):
-
-```bash
-npm run dev
-```
-
-Then open: [http://localhost:5173](http://localhost:5173)
-
-**Everyday / “production” style** (build the UI, one server):
-
-```bash
-npm run build
-npm start
-```
-
-Then open: [http://localhost:8787](http://localhost:8787)
-
-Log in with the `AUTH_USER` / `AUTH_PASSWORD` from your `.env`.
-
----
-
-## Daily flow
-
-1. Your phone (or Voice) gets a new text.
-2. Open SMSWingman → **Pull messages** (or sync that person).
-3. New inbound texts are saved; the AI returns **three styled drafts**.
-4. Edit the draft you like → **Send this**. It goes out through Google Voice.
-5. Optional: set a **response delay** per person before send.
-6. Long chats can be compacted into a short **memory summary** so the AI stays focused without losing important history.
-
----
-
-## Features
-
-| Area | What you get |
-|------|----------------|
-| System settings | Your context, guidelines, Moonshot key / model / URL, compaction settings |
-| Targets | Phone, name, tone / style / length, “push for date,” custom instructions, delay, memory |
-| Conversation | Stored thread per person + three pending drafts |
-| Compaction | When a thread gets long, older messages fold into an editable summary |
-
----
-
-## Optional: command-line Google Voice
-
-Same Chrome login as the app:
-
-```bash
-npm run gv -- send --to +15551234567 --message "Hi" --yes
-npm run gv -- read --from +15551234567 --json
-npm run login
-npm run check
-```
-
----
-
-## Cloud / VPS notes
-
-Prefer a machine with **≥ 2 GB RAM** if Chrome stays open. Keep Chrome’s debug port (**9222**) on **localhost only**—never expose it to the public internet.
-
-On a headless VPS, Chrome runs under **Xvfb** (virtual display). You cannot see that window on your laptop unless you connect with **VNC** through an SSH tunnel.
-
-### VPS Google Voice login via VNC
-
-#### 1. On the VPS — Chrome + VNC helpers
-
-```bash
+cd /opt/SMSWingman
 export DISPLAY=:99
-cd ~/htdocs/wingman   # or your install path
-
-# Virtual display + Chrome remote debugging
+chmod +x scripts/*.sh
 ./scripts/restart-gv-chrome.sh
 # or: ./scripts/start-gv-chrome.sh
+```
 
-# VNC attached to that display (localhost only)
+Attach VNC to that same display (**localhost only** on the VPS):
+
+```bash
 pgrep -x x11vnc >/dev/null || \
   x11vnc -display :99 -rfbport 5900 -localhost -nopw -forever -shared &
 ```
 
-#### 2. On your PC — SSH tunnel
+## 7. Tunnel VNC from your laptop
 
-Leave this terminal open:
+**Keep this SSH session open** on your computer:
 
 ```bash
-ssh -i /path/to/your-key.pem -L 5900:127.0.0.1:5900 bitnami@YOUR_VPS_IP
+ssh -L 5900:127.0.0.1:5900 you@YOUR_VPS_IP
 ```
 
-Windows PowerShell example (Tailscale or public IP):
+Windows PowerShell (same idea):
 
 ```powershell
-ssh -i $env:USERPROFILE\.ssh\your-key.pem -L 5900:127.0.0.1:5900 bitnami@100.x.x.x
+ssh -L 5900:127.0.0.1:5900 you@YOUR_VPS_IP
 ```
 
-#### 3. Connect a VNC client
+If you use a key file:
 
-Install TigerVNC, RealVNC Viewer, or TightVNC, then connect to:
+```bash
+ssh -i /path/to/your-key -L 5900:127.0.0.1:5900 you@YOUR_VPS_IP
+```
 
-**`127.0.0.1:5900`** (or `localhost:5900`)
+## 8. Open VNC and sign into GV
 
-No password if you started x11vnc with `-nopw`.
+1. On your laptop, open TigerVNC / RealVNC / TightVNC.
+2. Connect to **`127.0.0.1:5900`** (or `localhost:5900`).
+3. You should see the Xvfb desktop and Chrome.
+4. In that Chrome window, sign into the **Google account that owns your GV number** (complete 2FA).
+5. Open the GV **Messages** UI and confirm you see your threads (not a marketing dead-end page).
 
-You should see the Xvfb desktop and Chrome.
-
-#### 4. Sign into Google Voice in that Chrome window
-
-1. Sign into the Google account that owns your Voice number (complete 2FA if asked).
-2. Open [https://voice.google.com/u/0/messages](https://voice.google.com/u/0/messages).
-3. Confirm you see **Messages** (not the Workspace marketing page).
-
-#### 5. Finish Wingman login (second SSH session)
+Blank VNC? Restart Chrome on the VPS:
 
 ```bash
 export DISPLAY=:99
-cd ~/htdocs/wingman
-npm run login
-```
-
-Wait until it prints **Logged in**. Session is stored under `GV_PROFILE` (default `~/.google-voice-sms/chrome-profile`).
-
-If VNC is blank, restart Chrome on the VPS:
-
-```bash
-DISPLAY=:99 ./scripts/restart-gv-chrome.sh
+cd /opt/SMSWingman
+./scripts/restart-gv-chrome.sh
 pgrep -a x11vnc || x11vnc -display :99 -rfbport 5900 -localhost -nopw -forever -shared &
 ```
 
-### Useful `.env` on Linux VPS
+## 9. Finish Wingman login (second SSH session)
 
-```env
-DISPLAY=:99
-GV_PROFILE=/home/bitnami/.google-voice-sms/chrome-profile
-GV_DEBUG_PORT=9222
-COOKIE_SECURE=1
+Open **another** SSH session to the VPS:
+
+```bash
+ssh you@YOUR_VPS_IP
+export DISPLAY=:99
+cd /opt/SMSWingman
+npm run login
 ```
 
-Put HTTPS and app login (`AUTH_*`) in front before exposing the site outside your home network / Tailscale.
+Wait until it prints that you're logged in. Session lives under `GV_PROFILE`.
+
+Sanity check:
+
+```bash
+export DISPLAY=:99
+npm run check
+```
+
+## 10. Build and run the app
+
+```bash
+cd /opt/SMSWingman
+npm run build
+npm start
+```
+
+Open `http://YOUR_VPS_IP:8787` (or better: put **Caddy/nginx + HTTPS**, or **Tailscale**, in front and set `COOKIE_SECURE=1`).
+
+Log in with `AUTH_USER` / `AUTH_PASSWORD`.
+
+Dev mode (hot reload) if you're hacking on the box:
+
+```bash
+npm run dev
+# UI often on :5173, API on :8787 — see terminal output
+```
+
+## 11. First-run product setup (inside the UI)
+
+1. **System Settings** — paste your LLM key if needed; set base URL + model; write who you are (age, work, interests) and global guidelines.
+2. Add a **target** (phone + name) — tone, style, length, push-for-date, custom instructions, delay.
+3. **Pull messages** / sync that person.
+4. Review the **three drafts**, edit, send.
+5. Peek at **memory** after a few exchanges — edit it if the bot learned the wrong lore.
+
+## 12. Optional CLI (same GV session)
+
+```bash
+export DISPLAY=:99
+cd /opt/SMSWingman
+npm run gv -- send --to +15551234567 --message "Hi" --yes
+npm run gv -- read --from +15551234567 --json
+```
+
+## 13. Keep it alive (optional)
+
+Use `systemd`, `pm2`, or your favorite process manager for `npm start`, Xvfb/Chrome, and `x11vnc`. After a reboot you'll usually need display + Chrome (+ VNC if you're logging in again) before Wingman can talk to GV.
+
+Example sketch with pm2:
+
+```bash
+sudo npm i -g pm2
+cd /opt/SMSWingman
+pm2 start npm --name smswingman -- start
+pm2 save
+```
+
+(Still start Xvfb/Chrome via the scripts on boot — wire that however you prefer.)
+
+---
+
+## Security (non-negotiable)
+
+- **Do not** publish ports **9222** (Chrome CDP) or **5900** (VNC) on the open internet. Localhost + SSH tunnel (or Tailscale) only.
+- Put a real password on `AUTH_PASSWORD`. Prefer HTTPS before you leave the LAN.
+- This scrapes a consumer messaging UI. Treat account risk seriously.
+
+---
+
+## Troubleshooting
+
+| Problem | What to try |
+|---------|-------------|
+| `npm` not found | Reinstall Node 18+ and open a new shell |
+| GV login / "browser not secure" | Finish Google sign-in **by hand in VNC Chrome**, including 2FA |
+| Marketing page instead of Messages | Wrong Google account / not fully in GV — fix in VNC, then `npm run login` again |
+| `check` fails | `export DISPLAY=:99` then `npm run login` / `npm run check` |
+| `page.goto` timeout | Restart `./scripts/restart-gv-chrome.sh`; confirm CDP on 9222 |
+| AI drafts fail | Key + `LLM_BASE_URL` + `LLM_MODEL` in `.env` or System Settings; check provider quota |
+| Can't open the site | `:8787` after `npm start`; `:5173` often for `npm run dev` |
+| Port in use | Change `PORT` in `.env` |
+| Sync/send feels slow or flakes | Expected — it's a scrape. Retry; file an issue / PR when GV markup changes |
 
 ---
 
@@ -240,69 +331,36 @@ Put HTTPS and app login (`AUTH_*`) in front before exposing the site outside you
 SMSWingman/
 ├── README.md
 ├── package.json
-├── .env.example          ← copy to .env
-├── send-gv-sms.mjs       ← Google Voice CLI helpers
-├── lib/google-voice.mjs  ← Chrome / Voice automation
-├── scripts/
-│   ├── start-gv-chrome.sh
-│   └── restart-gv-chrome.sh
-├── server/               ← Express API + SQLite
-├── client/               ← React (Vite) UI
-└── data/                 ← local database (created at runtime)
+├── .env.example
+├── send-gv-sms.mjs       # GV CLI helpers
+├── scripts/              # Xvfb + Chrome helpers (VPS)
+├── server/               # Express API + SQLite
+├── client/               # React (Vite) UI
+└── data/                 # local DB (runtime)
 ```
-
----
-
-## Troubleshooting
-
-| Problem | What to try |
-|---------|-------------|
-| `npm` not found | Reinstall Node.js LTS and open a **new** terminal |
-| Login / “browser not secure” | Finish Google sign-in by hand in the Chrome window, including 2FA |
-| Lands on Workspace marketing page | Not signed into personal Voice — use VNC (above) and sign in, then open Messages |
-| `check` fails | Run `npm run login` again (on VPS: `export DISPLAY=:99` first) |
-| `page.goto` timeout on VPS | Ensure Xvfb + Chrome CDP; run `./scripts/restart-gv-chrome.sh` |
-| AI drafts fail | Confirm `MOONSHOT_API_KEY` in `.env` or Settings; check Moonshot account billing/quota |
-| Can’t open the site | Use the URL for how you started (`:5173` for `dev`, `:8787` for `start`) |
-| Port in use | Change `PORT` in `.env` |
-
-**Never expose Chrome’s debug port (9222) or VNC (5900) to the public internet**—keep them on localhost and use SSH tunnels or Tailscale.
-
----
-
-## Important disclaimers
-
-- Unofficial project; **not** affiliated with Google or Moonshot.
-- You are responsible for following [Google Voice terms](https://support.google.com/voice/), Moonshot’s terms, and messaging / consent laws where you live.
-- Not for spam or abusive automation.
-- Software is provided as-is; authors are not liable for account limits, lost messages, or other damages.
-
----
-
-## Want someone to install it for you?
-
-SMSWingman is free and open source. If you would rather pay to have it installed, configured, or customized (Windows, Mac, Linux, or a cloud VPS), reach out:
-
-**Nick Nguyen**  
-Internet Technology Services · Dana Point / Orange County, CA  
-
-- Website: [internettechnologyservices.com](https://internettechnologyservices.com)  
-- Email: [Its@Internettechnologyservices.com](mailto:Its@Internettechnologyservices.com)  
-- Email: [its@NickNguyen.com](mailto:its@NickNguyen.com)  
-- Office: (949) 446-1716  
-- Mobile: (949) 386-0344  
-- LinkedIn: [linkedin.com/in/itsnicknguyen](https://www.linkedin.com/in/itsnicknguyen/)
-
-Please mention **“SMSWingman setup”** in the subject line.
 
 ---
 
 ## Contributing
 
-Issues and pull requests are welcome—especially fixes when Google changes the Voice website. Please keep the project oriented around **personal, consenting, one-to-one** messaging.
+Issues and PRs welcome — especially when GV's website moves the cheese. Keep the project aimed at **personal, consenting, one-to-one** messaging. If the scrape breaks and you fix it, you're the real wingman.
+
+---
+
+## Disclaimers
+
+- Unofficial. Not affiliated with Google or any LLM vendor.
+- You are responsible for GV's terms, your LLM provider's terms, and messaging / consent laws where you live.
+- Not for spam or abusive automation.
+- Provided as-is. Authors aren't liable for account limits, lost messages, awkward dates, or other damages.
+- Yes, it's a hack. A working one. Act accordingly.
 
 ---
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE) if present in this repository.
+MIT — see [`LICENSE`](LICENSE).
+
+---
+
+Got a date out of it? Tip, donate, or hire me for the next hack. I need the work more than I need another triple-text.

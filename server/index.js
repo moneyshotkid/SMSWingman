@@ -32,8 +32,8 @@ const db = openDb();
 {
   const s = getSettings(db);
   const seed = {};
-  if (!s.moonshot_api_key && process.env.MOONSHOT_API_KEY) {
-    seed.moonshot_api_key = process.env.MOONSHOT_API_KEY;
+  if (!s.moonshot_api_key && (process.env.LLM_API_KEY || process.env.MOONSHOT_API_KEY)) {
+    seed.moonshot_api_key = process.env.LLM_API_KEY || process.env.MOONSHOT_API_KEY;
   }
   if (process.env.LLM_BASE_URL) seed.llm_base_url = process.env.LLM_BASE_URL;
   if (process.env.LLM_MODEL) seed.llm_model = process.env.LLM_MODEL;

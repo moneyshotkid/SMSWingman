@@ -51,7 +51,7 @@ export default function App() {
   }, []);
 
   const startGvBusy = useCallback(
-    (message = "Talking to Google Voice…") => {
+    (message = "Talking to GV…") => {
       startBusy(message, "Patience is a virtue.");
     },
     [startBusy],
@@ -166,7 +166,7 @@ export default function App() {
   };
   const onSyncAll = async () => {
     if (locked) return;
-    startGvBusy("Pulling Google Voice messages…");
+    startGvBusy("Pulling GV messages…");
     setError("");
     try {
       const result = await api.syncAll();
@@ -191,7 +191,7 @@ export default function App() {
   const onCreate = async (e) => {
     e.preventDefault();
     if (locked) return;
-    startGvBusy("Adding target & syncing Google Voice…");
+    startGvBusy("Adding target & syncing GV…");
     setError("");
     try {
       const result = await api.createTarget({
@@ -265,13 +265,13 @@ export default function App() {
               SMS<span>Wingman</span>
             </h1>
           </div>
-          <div className="status-pill" title="Google Voice session">
+          <div className="status-pill" title="GV session">
             <span className={`status-dot ${gvOk ? "on" : ""}`} />
             <span className="status-label status-label-short">
               {gvOk ? "GV on" : gvOk === false ? "GV off" : "…"}
             </span>
             <span className="status-label status-label-full">
-              Google Voice {gvOk ? "connected" : gvOk === false ? "not logged in" : "…"}
+              GV {gvOk ? "connected" : gvOk === false ? "not logged in" : "…"}
             </span>
           </div>
         </div>
@@ -391,7 +391,7 @@ export default function App() {
             <h2 style={{ fontFamily: "var(--display)", fontWeight: 400 }}>
               Pick or add a target
             </h2>
-            <p>When you get a Google Voice notification, open Wingman and hit Pull messages.</p>
+            <p>When you get a GV notification, open Wingman and hit Pull messages.</p>
             <button
               className="btn btn-primary"
               type="button"

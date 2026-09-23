@@ -11,8 +11,8 @@ const DEFAULT_SETTINGS = {
   system_guidelines:
     "You are a discreet personal SMS dating coach. Draft natural texts that sound like the user, not like an AI. Keep replies conversational and appropriate for SMS.",
   moonshot_api_key: "",
-  llm_base_url: "https://api.moonshot.ai/v1",
-  llm_model: "kimi-k3",
+  llm_base_url: "https://api.openai.com/v1",
+  llm_model: "gpt-4o-mini",
   reasoning_effort: "low",
   keep_recent_messages: "24",
   compact_when_over: "40",

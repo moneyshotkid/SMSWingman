@@ -5,8 +5,8 @@ const EMPTY = {
   self_context: "",
   system_guidelines: "",
   moonshot_api_key: "",
-  llm_base_url: "https://api.moonshot.ai/v1",
-  llm_model: "kimi-k3",
+  llm_base_url: "https://api.openai.com/v1",
+  llm_model: "gpt-4o-mini",
   reasoning_effort: "low",
   keep_recent_messages: "24",
   compact_when_over: "40",
@@ -71,7 +71,7 @@ export default function SettingsPanel({ onSaved, onError }) {
 
           <div className="form-grid two">
             <label>
-              Moonshot API key
+              LLM API key
               <input
                 type="password"
                 value={form.moonshot_api_key}
