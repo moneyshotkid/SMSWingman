@@ -188,12 +188,10 @@ a.btn {
   opacity: 0.65;
   cursor: wait;
 }
-.btn-reconnect-gv .label-short {
-  display: none;
-}
-@media (max-width: 720px) {
-  .btn-reconnect-gv .label-full { display: none; }
-  .btn-reconnect-gv .label-short { display: inline; }
+.row .btn-reconnect-gv,
+.gv-cta-actions .btn-reconnect-gv {
+  width: auto;
+  margin-top: 0;
 }
 
 .status-pill {
@@ -762,6 +760,13 @@ textarea {
 
 .gv-cta-banner strong {
   color: var(--text);
+}
+
+.gv-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .gv-desk {

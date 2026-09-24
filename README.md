@@ -323,6 +323,8 @@ When the GV session expires you do not need a separate VNC app. Sign in inside W
 3. The page embeds the noVNC desktop (`GV_NOVNC_URL`, default `http://127.0.0.1:6080/`). The server turns that into `vnc.html` with **`resize=scale`**.
 4. Sign in on that desktop (2FA included). The page polls `GET /api/gv/status` and the banner clears once `loggedIn` is true.
 
+There is a second path when GV is signed out: **Reconnect Google Voice** in the sidebar, on the signed-out banner, and in Settings. That button calls `POST /api/gv/reconnect`, which runs `gv-autofill` (`GV_AUTOFILL_BIN`, default `/root/.google-voice-sms/bin/gv-autofill`), then opens the portal on port `GV_PORTAL_PORT` (default **6080**) so you can finish 2FA. The in-app desktop is the same screen embedded at `/gv-login`. Use whichever is easier; neither replaces the other.
+
 **Hand tool.** `resize=scale` fits the whole remote screen in the iframe. noVNC's hand/pan tool is intentionally unused in that mode — panning is only for an unscaled desktop that is larger than the browser. Leave the noVNC scaling control on **Scale**. On a phone, pinch-zoom the browser if you need a closer look; don't switch scaling to None or you'll get the hand tool back.
 
 **`GV_NOVNC_URL`.** `http://127.0.0.1:6080/` is the websockify port on the machine running Wingman. That is correct when the browser is on that same machine. From a phone, `127.0.0.1` is the phone, so the embed will be blank. Either:

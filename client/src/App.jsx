@@ -309,16 +309,16 @@ export default function App() {
       window.open(gvPortalUrl(), "_blank", "noopener,noreferrer");
       if (result.status === "already_logged_in") {
         setGvOk(true);
-        setToast("Google Voice already signed in");
+        flash("Google Voice already signed in");
       } else if (
         String(result.status || "").includes("2fa") ||
         String(result.status || "").includes("awaiting")
       ) {
-        setToast("Email/password filled — finish 2FA in the portal");
+        flash("Email/password filled — finish 2FA in the portal");
       } else if (result.ok) {
-        setToast("Autofill ran — check the portal");
+        flash("Autofill ran — check the portal");
       } else {
-        setToast(`Autofill: ${result.status || "check portal"}`);
+        flash(`Autofill: ${result.status || "check portal"}`);
       }
       setTimeout(() => {
         refreshGv().catch(() => {});
@@ -368,7 +368,7 @@ export default function App() {
           <button
             type="button"
             className={`status-pill ${gvOk === false ? "is-off" : ""}`}
-            title={gvOk === false ? "Reconnect GV" : "GV session"}
+            title={gvOk === false ? "Open the GV desktop" : "GV session"}
             disabled={locked}
             onClick={openGvLogin}
           >
@@ -503,17 +503,37 @@ export default function App() {
           <div className="gv-cta-banner" role="status">
             <div>
               <strong>GV is signed out.</strong>{" "}
-              <span>Pull and send will fail until you sign in again on the GV desktop.</span>
+              <span>
+                Autofill the sign-in and finish 2FA in the portal, or open the GV desktop here.
+              </span>
             </div>
-            <button className="btn btn-primary" type="button" disabled={locked} onClick={openGvLogin}>
-              Reconnect GV
-            </button>
+            <div className="gv-cta-actions">
+              <button
+                className="btn btn-reconnect-gv"
+                type="button"
+                disabled={locked || gvReconnecting}
+                onClick={onReconnectGv}
+              >
+                <span className="label-full">{gvReconnecting ? "Signing in…" : "Reconnect Google Voice"}</span>
+                <span className="label-short">{gvReconnecting ? "…" : "Reconnect GV"}</span>
+              </button>
+              <button className="btn btn-primary" type="button" disabled={locked} onClick={openGvLogin}>
+                Open GV desktop
+              </button>
+            </div>
           </div>
         )}
 
         {view === "gv" ? (
           <GvLoginPage onBack={() => leaveGvLogin("inbox")} onStatus={setGvOk} />
         ) : view === "settings" ? (
+          <SettingsPanel
+            onSaved={flash}
+            onError={reportError}
+            onReconnect={openGvLogin}
+            onAutofill={onReconnectGv}
+            autofillBusy={gvReconnecting}
+          />
           <SettingsPanel onSaved={flash} onError={reportError} onReconnect={openGvLogin} />
         ) : selected ? (
           <TargetPanel
