@@ -80,6 +80,63 @@ app.get("/api/gv/status", async (_req, res) => {
   }
 });
 
+app.post("/api/gv/reconnect", async (_req, res) => {
+  const { spawn } = await import("node:child_process");
+  const portalPort = Number(process.env.GV_PORTAL_PORT || 6080);
+  const autofillBin = process.env.GV_AUTOFILL_BIN || "/root/.google-voice-sms/bin/gv-autofill";
+  try {
+    const child = spawn(autofillBin, [], {
+      env: { ...process.env, DISPLAY: process.env.DISPLAY || ":99" },
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    child.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
+    const code = await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        try {
+          child.kill("SIGTERM");
+        } catch {}
+        resolve(-2);
+      }, 90000);
+      child.on("error", (err) => {
+        clearTimeout(timer);
+        stderr += String(err.message || err);
+        resolve(-1);
+      });
+      child.on("close", (c) => {
+        clearTimeout(timer);
+        resolve(c ?? -1);
+      });
+    });
+    const lines = stdout.trim().split(/\n/).filter(Boolean);
+    const status = (lines.pop() || "").trim();
+    const nice = status || (code === -2 ? "error:timeout" : `error:exit_${code}`);
+    const ok =
+      code === 0 ||
+      nice === "already_logged_in" ||
+      nice.includes("2fa") ||
+      nice.includes("awaiting") ||
+      nice.startsWith("filled_");
+    res.json({
+      ok,
+      status: nice,
+      portalPath: `:${portalPort}/`,
+      detail: stderr.slice(-500),
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      status: "error:" + err.message,
+      portalPath: `:${portalPort}/`,
+    });
+  }
+});
+
 app.get("/api/settings", (_req, res) => {
   const settings = getSettings(db);
   // Never echo full key in list UIs if empty; still return for edit form
