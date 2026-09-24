@@ -82,6 +82,22 @@ app.get("/api/gv/status", async (_req, res) => {
   }
 });
 
+// Opt-in, session-authenticated. The command is a fixed script or a validated
+// systemd unit — the request body cannot choose what runs.
+app.post("/api/gv/chrome/restart", async (req, res) => {
+  if (req.body?.confirm !== true) {
+    return res.status(400).json({
+      error: 'Send { "confirm": true } to restart GV Chrome.',
+    });
+  }
+  try {
+    const result = await restartGvChrome();
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 app.post("/api/gv/reconnect", async (_req, res) => {
   const { spawn } = await import("node:child_process");
   const portalPort = Number(process.env.GV_PORTAL_PORT || 6080);

@@ -12,7 +12,7 @@ const EMPTY = {
   compact_when_over: "40",
 };
 
-export default function SettingsPanel({ onSaved, onError, onReconnect, onAutofill, autofillBusy }) {
+export default function SettingsPanel({ onSaved, onError, onReconnect }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
 

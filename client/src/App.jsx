@@ -534,6 +534,7 @@ export default function App() {
             onAutofill={onReconnectGv}
             autofillBusy={gvReconnecting}
           />
+          <SettingsPanel onSaved={flash} onError={reportError} onReconnect={openGvLogin} />
         ) : selected ? (
           <TargetPanel
             key={selected.id}
