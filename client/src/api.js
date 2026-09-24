@@ -52,4 +52,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ confirm: true }),
     }),
+  gvReconnect: () =>
+    request("/api/gv/reconnect", { method: "POST" }),
 };

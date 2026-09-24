@@ -7,6 +7,11 @@ import GvLoginPage from "./GvLoginPage.jsx";
 
 const GV_LOGIN_PATH = "/gv-login";
 
+function gvPortalUrl() {
+  const { protocol, hostname } = window.location;
+  return `${protocol}//${hostname}:6080/`;
+}
+
 function displayName(t) {
   const name = String(t?.name || "").trim();
   return name || t?.phone || "Unnamed";
@@ -24,6 +29,7 @@ export default function App() {
   const [targets, setTargets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [gvOk, setGvOk] = useState(null);
+  const [gvReconnecting, setGvReconnecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [busyMessage, setBusyMessage] = useState("");
   const [busyDetail, setBusyDetail] = useState("");
@@ -60,7 +66,7 @@ export default function App() {
   }, []);
 
   const startGvBusy = useCallback(
-    (message = "Talking to GV…") => {
+    (message = "Talking to Google Voice…") => {
       startBusy(message, "Patience is a virtue.");
     },
     [startBusy],
@@ -223,7 +229,7 @@ export default function App() {
   };
   const onSyncAll = async () => {
     if (locked) return;
-    startGvBusy("Pulling GV messages…");
+    startGvBusy("Pulling Google Voice messages…");
     setError("");
     try {
       const result = await api.syncAll();
@@ -248,7 +254,7 @@ export default function App() {
   const onCreate = async (e) => {
     e.preventDefault();
     if (locked) return;
-    startGvBusy("Adding target & syncing GV…");
+    startGvBusy("Adding target & syncing Google Voice…");
     setError("");
     try {
       const result = await api.createTarget({
@@ -293,6 +299,37 @@ export default function App() {
     setView("inbox");
     if (window.matchMedia("(max-width: 860px)").matches) setNavOpen(false);
   };
+
+
+  const onReconnectGv = useCallback(async () => {
+    setGvReconnecting(true);
+    setError("");
+    try {
+      const result = await api.gvReconnect();
+      window.open(gvPortalUrl(), "_blank", "noopener,noreferrer");
+      if (result.status === "already_logged_in") {
+        setGvOk(true);
+        setToast("Google Voice already signed in");
+      } else if (
+        String(result.status || "").includes("2fa") ||
+        String(result.status || "").includes("awaiting")
+      ) {
+        setToast("Email/password filled — finish 2FA in the portal");
+      } else if (result.ok) {
+        setToast("Autofill ran — check the portal");
+      } else {
+        setToast(`Autofill: ${result.status || "check portal"}`);
+      }
+      setTimeout(() => {
+        refreshGv().catch(() => {});
+      }, 4000);
+    } catch (err) {
+      setError(err.message || "Reconnect failed");
+      window.open(gvPortalUrl(), "_blank", "noopener,noreferrer");
+    } finally {
+      setGvReconnecting(false);
+    }
+  }, [refreshGv]);
 
   if (!authReady) {
     return (
@@ -343,6 +380,22 @@ export default function App() {
               GV {gvOk ? "connected" : gvOk === false ? "not signed in" : "…"}
             </span>
           </button>
+          {gvOk === false && (
+            <button
+              type="button"
+              className="btn btn-reconnect-gv"
+              disabled={locked || gvReconnecting}
+              onClick={onReconnectGv}
+              title="Autofill Google login, then finish 2FA in the portal"
+            >
+              <span className="label-full">
+                {gvReconnecting ? "Signing in…" : "Reconnect Google Voice"}
+              </span>
+              <span className="label-short">
+                {gvReconnecting ? "…" : "Reconnect GV"}
+              </span>
+            </button>
+          )}
         </div>
 
         <div className="nav-actions">
@@ -478,7 +531,7 @@ export default function App() {
             <h2 style={{ fontFamily: "var(--display)", fontWeight: 400 }}>
               Pick or add a target
             </h2>
-            <p>When you get a GV notification, open Wingman and hit Pull messages.</p>
+            <p>When you get a Google Voice notification, open Wingman and hit Pull messages.</p>
             <button
               className="btn btn-primary"
               type="button"

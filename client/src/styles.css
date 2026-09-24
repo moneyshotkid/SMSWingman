@@ -166,6 +166,36 @@ a.btn {
   align-items: center;
 }
 
+.btn-reconnect-gv {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+}
+.btn-reconnect-gv:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.btn-reconnect-gv:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.btn-reconnect-gv .label-short {
+  display: none;
+}
+@media (max-width: 720px) {
+  .btn-reconnect-gv .label-full { display: none; }
+  .btn-reconnect-gv .label-short { display: inline; }
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
