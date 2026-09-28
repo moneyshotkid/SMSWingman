@@ -1,23 +1,53 @@
 import crypto from "node:crypto";
 import session from "express-session";
+import {
+  passwordIsPlaceholder,
+  sessionSecretIsPlaceholder,
+  createRateLimiter,
+} from "../lib/security.mjs";
+
+const loginLimiter = createRateLimiter({ limit: 8, windowMs: 15 * 60 * 1000 });
+
+let cachedSessionSecret = null;
+let sessionSecretEphemeral = false;
 
 function authUser() {
-  return (process.env.AUTH_USER || "admin").trim();
+  return (process.env.AUTH_USER || "admin").trim() || "admin";
 }
 
 function authPassword() {
   return (process.env.AUTH_PASSWORD || "").trim();
 }
 
-function sessionSecret() {
-  return (
-    process.env.SESSION_SECRET ||
-    crypto.createHash("sha256").update(`wingman-${authPassword() || "dev"}`).digest("hex")
-  );
+export function authDisabledReason() {
+  const password = authPassword();
+  if (!password) return "AUTH_PASSWORD is not set";
+  if (passwordIsPlaceholder(password)) {
+    return "AUTH_PASSWORD is a known placeholder. Set a unique password in .env";
+  }
+  return null;
 }
 
 export function authConfigured() {
-  return Boolean(authPassword());
+  return authDisabledReason() == null;
+}
+
+export function sessionSecret() {
+  if (cachedSessionSecret) return cachedSessionSecret;
+  const configured = (process.env.SESSION_SECRET || "").trim();
+  if (configured && !sessionSecretIsPlaceholder(configured)) {
+    cachedSessionSecret = configured;
+    sessionSecretEphemeral = false;
+    return cachedSessionSecret;
+  }
+  cachedSessionSecret = crypto.randomBytes(32).toString("hex");
+  sessionSecretEphemeral = true;
+  return cachedSessionSecret;
+}
+
+export function sessionSecretWasEphemeral() {
+  sessionSecret();
+  return sessionSecretEphemeral;
 }
 
 export function sessionMiddleware() {
@@ -36,21 +66,26 @@ export function sessionMiddleware() {
 }
 
 function safeEqual(a, b) {
-  const aa = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  if (aa.length !== bb.length) return false;
-  return crypto.timingSafeEqual(aa, bb);
+  const ha = crypto.createHash("sha256").update(String(a), "utf8").digest();
+  const hb = crypto.createHash("sha256").update(String(b), "utf8").digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
 
 export function verifyCredentials(username, password) {
   const expectedPass = authPassword();
-  if (!expectedPass) return false;
+  if (!expectedPass || passwordIsPlaceholder(expectedPass)) return false;
   const userOk = safeEqual(
     String(username || "").trim().toLowerCase(),
     authUser().toLowerCase(),
   );
   const passOk = safeEqual(String(password || ""), expectedPass);
   return userOk && passOk;
+}
+
+export function clientAddress(req) {
+  const socketAddr = req.socket?.remoteAddress || req.ip || "unknown";
+  if (process.env.TRUST_PROXY === "1") return req.ip || socketAddr;
+  return socketAddr;
 }
 
 export function requireAuth(req, res, next) {
@@ -73,7 +108,7 @@ export function mountAuthRoutes(app) {
       return res.json({
         authenticated: false,
         configured: false,
-        error: "AUTH_PASSWORD is not set",
+        error: authDisabledReason(),
       });
     }
     if (req.session?.user) {
@@ -92,13 +127,26 @@ export function mountAuthRoutes(app) {
         error: "Set AUTH_PASSWORD in .env before logging in.",
       });
     }
+    const address = clientAddress(req);
+    const gate = loginLimiter.check(address);
+    if (!gate.ok) {
+      const retryAfter = Math.max(1, Math.ceil(gate.retryAfterMs / 1000));
+      res.set("Retry-After", String(retryAfter));
+      return res.status(429).json({ error: "Too many login attempts. Try again later." });
+    }
     const username = String(req.body?.username || "").trim();
     const password = String(req.body?.password || "");
     if (!verifyCredentials(username, password)) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
-    req.session.user = { username: authUser() };
-    res.json({ ok: true, user: req.session.user });
+    loginLimiter.reset(address);
+    req.session.regenerate((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Could not start a session" });
+      }
+      req.session.user = { username: authUser() };
+      res.json({ ok: true, user: req.session.user });
+    });
   });
 
   app.post("/api/auth/logout", (req, res) => {

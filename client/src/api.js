@@ -47,7 +47,11 @@ export const api = {
       body: JSON.stringify({ body }),
     }),
   gvStatus: () => request("/api/gv/status"),
-  gvReconnect: () => request("/api/gv/reconnect", { method: "POST" }),
+  gvReconnect: () =>
+    request("/api/gv/reconnect", {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    }),
   restartGvChrome: () =>
     request("/api/gv/chrome/restart", {
       method: "POST",

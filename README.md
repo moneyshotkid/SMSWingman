@@ -151,8 +151,12 @@ Minimum:
 
 ```env
 AUTH_USER=admin
-AUTH_PASSWORD=pick-a-strong-password
-SESSION_SECRET=paste-a-long-random-string-here
+AUTH_PASSWORD=<unique password — sample words from this repo are rejected>
+SESSION_SECRET=<long random string — do not leave the example text>
+
+# Default listen address is 127.0.0.1. Uncomment only if a proxy or Tailscale
+# is in front and you accept the exposure:
+# HOST=0.0.0.0
 
 # OpenAI-compatible LLM (seeds System Settings; also editable in the UI)
 LLM_API_KEY=sk-your-openai-compatible-key
@@ -267,7 +271,7 @@ npm run build
 npm start
 ```
 
-Open `http://YOUR_VPS_IP:8787` (or better: put **Caddy/nginx + HTTPS**, or **Tailscale**, in front and set `COOKIE_SECURE=1`).
+The API listens on `127.0.0.1:8787` unless you set `HOST`. Reach it with an SSH tunnel (`ssh -L 8787:127.0.0.1:8787 you@YOUR_VPS_IP`, then open `http://127.0.0.1:8787`) or put **Caddy/nginx + HTTPS**, or **Tailscale**, in front and set `COOKIE_SECURE=1`. Set `HOST=0.0.0.0` only when that proxy or firewall is already in place.
 
 Log in with `AUTH_USER` / `AUTH_PASSWORD`.
 
@@ -323,7 +327,7 @@ When the GV session expires you do not need a separate VNC app. Sign in inside W
 3. The page embeds the noVNC desktop (`GV_NOVNC_URL`, default `http://127.0.0.1:6080/`). The server turns that into `vnc.html` with **`resize=scale`**.
 4. Sign in on that desktop (2FA included). The page polls `GET /api/gv/status` and the banner clears once `loggedIn` is true.
 
-There is a second path when GV is signed out: **Reconnect Google Voice** in the sidebar, on the signed-out banner, and in Settings. That button calls `POST /api/gv/reconnect`, which runs `gv-autofill` (`GV_AUTOFILL_BIN`, default `/root/.google-voice-sms/bin/gv-autofill`), then opens the portal on port `GV_PORTAL_PORT` (default **6080**) so you can finish 2FA. The in-app desktop is the same screen embedded at `/gv-login`. Use whichever is easier; neither replaces the other.
+There is a second path when GV is signed out: **Reconnect Google Voice** in the sidebar, on the signed-out banner, and in Settings. That button calls `POST /api/gv/reconnect` with `{ "confirm": true }`, which runs `gv-autofill` (`GV_AUTOFILL_BIN`, default `/root/.google-voice-sms/bin/gv-autofill`) and then opens the in-app desktop at `/gv-login`. It does not open port 6080 on the public hostname. The helper path has to be an absolute path to a real file; the browser cannot choose the command, and the helper's output is not shown in the page. The in-app desktop is the same screen embedded at `/gv-login`.
 
 **Hand tool.** `resize=scale` fits the whole remote screen in the iframe. noVNC's hand/pan tool is intentionally unused in that mode — panning is only for an unscaled desktop that is larger than the browser. Leave the noVNC scaling control on **Scale**. On a phone, pinch-zoom the browser if you need a closer look; don't switch scaling to None or you'll get the hand tool back.
 
@@ -340,8 +344,10 @@ There is a second path when GV is signed out: **Reconnect Google Voice** in the 
 
 ## Security (non-negotiable)
 
-- **Do not** publish ports **9222** (Chrome CDP), **5900** (VNC), or **6080** (noVNC) on the open internet. Localhost + SSH tunnel (or Tailscale) only. Wingman's login does not protect the noVNC port itself.
-- Put a real password on `AUTH_PASSWORD`. Prefer HTTPS before you leave the LAN.
+- **Do not** publish ports **9222** (Chrome CDP), **5900** (VNC), or **6080** (noVNC) on the open internet. Localhost + SSH tunnel (or Tailscale) only. Wingman's login does not protect the noVNC port itself. If you reverse-proxy `/novnc/`, that path is still the desktop: do not leave it reachable without the same login or a private network.
+- The server binds **127.0.0.1** unless `HOST` is set. Placeholder values for `AUTH_PASSWORD` and `SESSION_SECRET` (including `change-me-now` and `generate-a-long-random-string`) are rejected.
+- Put a unique password on `AUTH_PASSWORD`. Prefer HTTPS (`COOKIE_SECURE=1`) before you leave the LAN.
+- Do not run Wingman as root. The GV autofill helper under `/root` should be executable by the dedicated user, or you should invoke it from an admin shell instead of the web UI.
 - This scrapes a consumer messaging UI. Treat account risk seriously.
 
 ---

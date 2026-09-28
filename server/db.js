@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,11 +18,35 @@ const DEFAULT_SETTINGS = {
   compact_when_over: "40",
 };
 
+function restrictDataFile(path) {
+  try {
+    if (existsSync(path)) chmodSync(path, 0o600);
+  } catch {
+    /* a read-only mount should not stop the process */
+  }
+}
+
+const SHARED_PARENTS = new Set(["/", "/tmp", "/var/tmp", "/dev/shm", "/run", "/var", "/home"]);
+
 export function openDb(dbPath = process.env.WINGMAN_DB || DEFAULT_DB) {
-  mkdirSync(dirname(dbPath), { recursive: true });
+  const dir = dirname(dbPath);
+  const created = !existsSync(dir);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // Tighten only a directory this app created, or the default data/ folder.
+  // Never chmod a shared parent such as /tmp.
+  if (!SHARED_PARENTS.has(dir) && (created || dir === dirname(DEFAULT_DB))) {
+    try {
+      chmodSync(dir, 0o700);
+    } catch {
+      /* ignore */
+    }
+  }
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  restrictDataFile(dbPath);
+  restrictDataFile(`${dbPath}-wal`);
+  restrictDataFile(`${dbPath}-shm`);
   migrate(db);
   return db;
 }

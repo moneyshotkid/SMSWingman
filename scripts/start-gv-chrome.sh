@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 export DISPLAY="${DISPLAY:-:99}"
 PROFILE="${GV_PROFILE:-$HOME/.google-voice-sms/chrome-profile}"
 PORT="${GV_DEBUG_PORT:-9222}"
 
 if ! pgrep -x Xvfb >/dev/null 2>&1; then
-  Xvfb "$DISPLAY" -screen 0 1280x720x24 -ac >/tmp/xvfb.log 2>&1 &
+  Xvfb "$DISPLAY" -screen 0 1280x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
   sleep 1
 fi
 
@@ -15,6 +16,7 @@ if curl -sf --max-time 1 "http://127.0.0.1:${PORT}/json/version" >/dev/null; the
 fi
 
 mkdir -p "$PROFILE"
+chmod 700 "$PROFILE"
 rm -f "$PROFILE/SingletonLock" "$PROFILE/SingletonSocket" "$PROFILE/SingletonCookie"
 
 nohup google-chrome-stable \

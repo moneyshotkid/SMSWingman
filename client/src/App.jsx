@@ -7,11 +7,6 @@ import GvLoginPage from "./GvLoginPage.jsx";
 
 const GV_LOGIN_PATH = "/gv-login";
 
-function gvPortalUrl() {
-  const { protocol, hostname } = window.location;
-  return `${protocol}//${hostname}:6080/`;
-}
-
 function displayName(t) {
   const name = String(t?.name || "").trim();
   return name || t?.phone || "Unnamed";
@@ -306,7 +301,7 @@ export default function App() {
     setError("");
     try {
       const result = await api.gvReconnect();
-      window.open(gvPortalUrl(), "_blank", "noopener,noreferrer");
+      openGvLogin();
       if (result.status === "already_logged_in") {
         setGvOk(true);
         flash("Google Voice already signed in");
@@ -314,18 +309,19 @@ export default function App() {
         String(result.status || "").includes("2fa") ||
         String(result.status || "").includes("awaiting")
       ) {
-        flash("Email/password filled — finish 2FA in the portal");
+        flash("Email/password filled — finish 2FA on the desktop");
       } else if (result.ok) {
-        flash("Autofill ran — check the portal");
+        flash("Autofill ran — finish signing in on the desktop");
       } else {
-        flash(`Autofill: ${result.status || "check portal"}`);
+        flash(`Autofill: ${result.status || "check the desktop"}`);
       }
       setTimeout(() => {
         refreshGv().catch(() => {});
       }, 4000);
     } catch (err) {
+      // openGvLogin clears the banner; set the failure after that.
+      openGvLogin();
       setError(err.message || "Reconnect failed");
-      window.open(gvPortalUrl(), "_blank", "noopener,noreferrer");
     } finally {
       setGvReconnecting(false);
     }
@@ -497,7 +493,7 @@ export default function App() {
       )}
 
       <main className="main">
-        {error && view !== "gv" && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner">{error}</div>}
 
         {gvOk === false && view !== "gv" && (
           <div className="gv-cta-banner" role="status">
@@ -534,7 +530,6 @@ export default function App() {
             onAutofill={onReconnectGv}
             autofillBusy={gvReconnecting}
           />
-          <SettingsPanel onSaved={flash} onError={reportError} onReconnect={openGvLogin} />
         ) : selected ? (
           <TargetPanel
             key={selected.id}

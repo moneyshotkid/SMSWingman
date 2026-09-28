@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 export DISPLAY="${DISPLAY:-:99}"
 PROF="${GV_PROFILE:-$HOME/.google-voice-sms/chrome-profile}"
 PORT="${GV_DEBUG_PORT:-9222}"
 
 if ! pgrep -x Xvfb >/dev/null 2>&1; then
-  Xvfb "$DISPLAY" -screen 0 1280x720x24 -ac >/tmp/xvfb.log 2>&1 &
+  Xvfb "$DISPLAY" -screen 0 1280x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
   sleep 1
 fi
 
@@ -20,6 +21,7 @@ done < <(pgrep -f "user-data-dir=${PROF}" || true)
 sleep 2
 
 mkdir -p "$PROF"
+chmod 700 "$PROF"
 rm -f "$PROF/SingletonLock" "$PROF/SingletonSocket" "$PROF/SingletonCookie"
 
 nohup google-chrome-stable \
