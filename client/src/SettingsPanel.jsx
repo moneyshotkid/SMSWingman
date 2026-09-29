@@ -12,14 +12,26 @@ const EMPTY = {
   compact_when_over: "40",
 };
 
-export default function SettingsPanel({ onSaved, onError, onReconnect }) {
+export default function SettingsPanel({
+  onSaved,
+  onError,
+  onReconnect,
+  onAutofill,
+  autofillBusy = false,
+}) {
   const [form, setForm] = useState(EMPTY);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyHint, setKeyHint] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api
       .settings()
-      .then(({ settings }) => setForm({ ...EMPTY, ...settings }))
+      .then(({ settings }) => {
+        setKeyHint(settings.llm_api_key_hint || "");
+        setKeyDraft("");
+        setForm({ ...EMPTY, ...settings, moonshot_api_key: "" });
+      })
       .catch((err) => onError(err.message));
   }, [onError]);
 
@@ -30,8 +42,15 @@ export default function SettingsPanel({ onSaved, onError, onReconnect }) {
     setBusy(true);
     onError("");
     try {
-      const { settings } = await api.saveSettings(form);
-      setForm({ ...EMPTY, ...settings });
+      const body = { ...form };
+      delete body.moonshot_api_key;
+      delete body.llm_api_key_hint;
+      delete body.llm_api_key_set;
+      if (keyDraft.trim()) body.moonshot_api_key = keyDraft.trim();
+      const { settings } = await api.saveSettings(body);
+      setKeyHint(settings.llm_api_key_hint || "");
+      setKeyDraft("");
+      setForm({ ...EMPTY, ...settings, moonshot_api_key: "" });
       onSaved("System settings saved");
     } catch (err) {
       onError(err.message);
@@ -94,9 +113,9 @@ export default function SettingsPanel({ onSaved, onError, onReconnect }) {
               LLM API key
               <input
                 type="password"
-                value={form.moonshot_api_key}
-                onChange={set("moonshot_api_key")}
-                placeholder="sk-…"
+                value={keyDraft}
+                onChange={(e) => setKeyDraft(e.target.value)}
+                placeholder={keyHint ? `Saved (${keyHint}). Type a new key to replace it.` : "sk-…"}
                 autoComplete="off"
               />
             </label>

@@ -1,14 +1,18 @@
 import OpenAI from "openai";
 import { getSettings } from "../db.js";
+import { redactSecrets, validateLlmBaseUrl } from "../../lib/security.mjs";
 
 function clientFromSettings(settings) {
   const apiKey = settings.moonshot_api_key || process.env.LLM_API_KEY || process.env.MOONSHOT_API_KEY || "";
   if (!apiKey) {
     throw new Error("LLM API key missing. Set it in System Settings or LLM_API_KEY.");
   }
+  const baseURL = validateLlmBaseUrl(
+    settings.llm_base_url || process.env.LLM_BASE_URL || "https://api.openai.com/v1",
+  );
   return new OpenAI({
     apiKey,
-    baseURL: settings.llm_base_url || process.env.LLM_BASE_URL || "https://api.openai.com/v1",
+    baseURL,
   });
 }
 
@@ -36,7 +40,7 @@ export async function chatCompletion(db, { messages }) {
       err?.error?.message ||
       err?.message ||
       String(err);
-    throw new Error(detail);
+    throw new Error(redactSecrets(detail));
   }
 }
 

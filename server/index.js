@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb, getSettings, setSettings, nowIso } from "./db.js";
 import { normalizePhone } from "../lib/google-voice.mjs";
-import { getGvDeskStatus, restartGvChrome } from "./services/gv-desk.js";
+import { getGvDeskStatus, restartGvChrome, runGvAutofill } from "./services/gv-desk.js";
 import {
   syncAllTargets,
   syncTarget,
@@ -20,13 +20,25 @@ import {
   mountAuthRoutes,
   requireAuth,
   authConfigured,
+  authDisabledReason,
   getAuthUser,
+  clientAddress,
+  sessionSecretWasEphemeral,
 } from "./auth.js";
+import {
+  createRateLimiter,
+  isLoopbackBind,
+  normalizeSettingsPatch,
+  presentSettings,
+  validateLlmBaseUrl,
+} from "../lib/security.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: join(__dirname, "..", ".env") });
 
 const PORT = Number(process.env.PORT || 8787);
+const HOST = (process.env.HOST || "127.0.0.1").trim() || "127.0.0.1";
+const reconnectLimiter = createRateLimiter({ limit: 5, windowMs: 15 * 60 * 1000 });
 const db = openDb();
 
 // Seed API settings from env once if UI fields are still empty
@@ -36,21 +48,48 @@ const db = openDb();
   if (!s.moonshot_api_key && (process.env.LLM_API_KEY || process.env.MOONSHOT_API_KEY)) {
     seed.moonshot_api_key = process.env.LLM_API_KEY || process.env.MOONSHOT_API_KEY;
   }
-  if (process.env.LLM_BASE_URL) seed.llm_base_url = process.env.LLM_BASE_URL;
+  if (process.env.LLM_BASE_URL) {
+    try {
+      seed.llm_base_url = validateLlmBaseUrl(process.env.LLM_BASE_URL);
+    } catch (err) {
+      console.warn(`[llm] Ignoring LLM_BASE_URL: ${err.message}`);
+    }
+  }
   if (process.env.LLM_MODEL) seed.llm_model = process.env.LLM_MODEL;
   if (Object.keys(seed).length) setSettings(db, seed);
 }
 
 const app = express();
-app.set("trust proxy", 1);
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-  }),
-);
-app.use(express.json({ limit: "2mb" }));
+app.disable("x-powered-by");
+if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
+const corsOrigin = (process.env.CORS_ORIGIN || "").trim();
+if (corsOrigin) {
+  app.use(
+    cors({
+      origin: corsOrigin,
+      credentials: true,
+    }),
+  );
+}
+app.use(express.json({ limit: "1mb" }));
 app.use(sessionMiddleware());
+
+// Browsers send Origin on cross-site POSTs. Same-origin fetches match Host.
+app.use((req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
+  const origin = req.get("origin");
+  if (!origin) return next();
+  let originHost = "";
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return res.status(403).json({ error: "Blocked cross-site request" });
+  }
+  if (originHost !== req.get("host")) {
+    return res.status(403).json({ error: "Blocked cross-site request" });
+  }
+  next();
+});
 
 mountAuthRoutes(app);
 
@@ -82,77 +121,29 @@ app.get("/api/gv/status", async (_req, res) => {
   }
 });
 
-// Opt-in, session-authenticated. The command is a fixed script or a validated
-// systemd unit — the request body cannot choose what runs.
-app.post("/api/gv/chrome/restart", async (req, res) => {
+// Session-authenticated. Runs the fixed autofill helper (not a request-supplied
+// command) and returns only a short status token. The in-app desktop is
+// /gv-login; this route does not hand the browser a public noVNC port.
+app.post("/api/gv/reconnect", async (req, res) => {
   if (req.body?.confirm !== true) {
     return res.status(400).json({
-      error: 'Send { "confirm": true } to restart GV Chrome.',
+      error: 'Send { "confirm": true } to run GV autofill.',
     });
   }
-  try {
-    const result = await restartGvChrome();
-    res.json(result);
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+  const gate = reconnectLimiter.check(clientAddress(req));
+  if (!gate.ok) {
+    const retryAfter = Math.max(1, Math.ceil(gate.retryAfterMs / 1000));
+    res.set("Retry-After", String(retryAfter));
+    return res.status(429).json({ error: "Too many GV reconnect attempts. Try again later." });
   }
-});
-
-app.post("/api/gv/reconnect", async (_req, res) => {
-  const { spawn } = await import("node:child_process");
-  const portalPort = Number(process.env.GV_PORTAL_PORT || 6080);
-  const autofillBin = process.env.GV_AUTOFILL_BIN || "/root/.google-voice-sms/bin/gv-autofill";
   try {
-    const child = spawn(autofillBin, [], {
-      env: { ...process.env, DISPLAY: process.env.DISPLAY || ":99" },
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    child.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    const code = await new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* already gone */
-        }
-        resolve(-2);
-      }, 90000);
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        stderr += String(err.message || err);
-        resolve(-1);
-      });
-      child.on("close", (c) => {
-        clearTimeout(timer);
-        resolve(c ?? -1);
-      });
-    });
-    const lines = stdout.trim().split(/\n/).filter(Boolean);
-    const status = (lines.pop() || "").trim();
-    const nice = status || (code === -2 ? "error:timeout" : `error:exit_${code}`);
-    const ok =
-      code === 0 ||
-      nice === "already_logged_in" ||
-      nice.includes("2fa") ||
-      nice.includes("awaiting") ||
-      nice.startsWith("filled_");
-    res.json({
-      ok,
-      status: nice,
-      portalPath: `:${portalPort}/`,
-      detail: stderr.slice(-500),
-    });
+    const result = await runGvAutofill();
+    res.json({ ok: result.ok, status: result.status });
   } catch (err) {
-    res.status(500).json({
+    res.status(err.status || 500).json({
       ok: false,
-      status: "error:" + err.message,
-      portalPath: `:${portalPort}/`,
+      status: "error:failed",
+      error: "GV autofill could not be started.",
     });
   }
 });
@@ -174,30 +165,17 @@ app.post("/api/gv/chrome/restart", async (req, res) => {
 });
 
 app.get("/api/settings", (_req, res) => {
-  const settings = getSettings(db);
-  // Never echo full key in list UIs if empty; still return for edit form
-  res.json({ settings });
+  res.json({ settings: presentSettings(getSettings(db)) });
 });
 
 app.put("/api/settings", (req, res) => {
-  const allowed = [
-    "self_context",
-    "system_guidelines",
-    "moonshot_api_key",
-    "llm_base_url",
-    "llm_model",
-    "reasoning_effort",
-    "keep_recent_messages",
-    "compact_when_over",
-  ];
-  const patch = {};
-  for (const key of allowed) {
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) {
-      patch[key] = req.body[key];
-    }
+  try {
+    const patch = normalizeSettingsPatch(req.body);
+    const settings = setSettings(db, patch);
+    res.json({ settings: presentSettings(settings) });
+  } catch (err) {
+    res.status(400).json({ error: err.message || "Invalid settings" });
   }
-  const settings = setSettings(db, patch);
-  res.json({ settings });
 });
 
 app.get("/api/targets", (_req, res) => {
@@ -391,12 +369,28 @@ app.get(/^(?!\/api).*/, (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`SMSWingman API on http://localhost:${PORT}`);
-  if (!authConfigured()) {
+app.listen(PORT, HOST, () => {
+  console.log(`SMSWingman API on http://${HOST}:${PORT}`);
+  if (!isLoopbackBind(HOST)) {
     console.warn(
-      "[auth] AUTH_PASSWORD is not set — API is locked until you add it to .env",
+      `[bind] Listening on ${HOST}. Prefer 127.0.0.1 and a reverse proxy or Tailscale. Do not publish ports 9222, 5900, or 6080.`,
     );
+    if (process.env.COOKIE_SECURE !== "1") {
+      console.warn("[auth] COOKIE_SECURE is not 1. Session cookies will travel over plain HTTP.");
+    }
+  }
+  if (sessionSecretWasEphemeral()) {
+    console.warn(
+      "[auth] SESSION_SECRET is missing or still the example value. Using a random secret for this process; set a long random SESSION_SECRET in .env.",
+    );
+  }
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    console.warn(
+      "[auth] The server is running as root. A stolen session can start the GV autofill helper and Chrome. Run Wingman as a dedicated user.",
+    );
+  }
+  if (!authConfigured()) {
+    console.warn(`[auth] ${authDisabledReason()} — API is locked until you fix .env`);
   } else {
     console.log(`[auth] Login required (user: ${getAuthUser()})`);
   }

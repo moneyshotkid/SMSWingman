@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { probeGvSession } from "../../lib/google-voice.mjs";
 import { buildNovncEmbedUrl } from "../../lib/novnc-url.mjs";
+import { publicAutofillStatus, sanitizedChildEnv } from "../../lib/security.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const restartScript = join(repoRoot, "scripts", "restart-gv-chrome.sh");
@@ -71,7 +72,7 @@ function runFixed(command, args, timeoutMs) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: repoRoot,
-      env: process.env,
+      env: sanitizedChildEnv(process.env),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -148,6 +149,83 @@ export function restartGvChrome() {
       restartInflight = null;
     });
   return restartInflight;
+}
+
+const AUTOFILL_DEFAULT = "/root/.google-voice-sms/bin/gv-autofill";
+
+/**
+ * The helper path comes from the server environment, never from the request.
+ * It has to be an absolute path to a real file. spawn() is called without a
+ * shell, so the path is not interpreted as a command line.
+ */
+export function resolveAutofillBin(raw = process.env.GV_AUTOFILL_BIN || AUTOFILL_DEFAULT) {
+  const value = String(raw || "").trim();
+  if (!value.startsWith("/") || value.includes("\0") || /[\r\n]/.test(value)) {
+    const err = new Error("GV autofill helper path is not allowed.");
+    err.status = 500;
+    throw err;
+  }
+  try {
+    const resolved = realpathSync(value);
+    if (!statSync(resolved).isFile()) throw new Error("not a file");
+    return resolved;
+  } catch (err) {
+    if (err.status) throw err;
+    const missing = new Error("GV autofill helper is not available on this server.");
+    missing.status = 500;
+    throw missing;
+  }
+}
+
+export function runGvAutofill() {
+  const bin = resolveAutofillBin();
+  return new Promise((resolve) => {
+    const child = spawn(bin, [], {
+      env: sanitizedChildEnv({
+        ...process.env,
+        DISPLAY: process.env.DISPLAY || ":99",
+      }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    const take = (chunk, into) => {
+      const next = into + chunk.toString();
+      return next.length > 4000 ? next.slice(-4000) : next;
+    };
+    child.stdout.on("data", (chunk) => {
+      stdout = take(chunk, stdout);
+    });
+    child.stderr.on("data", (chunk) => {
+      // Drain the pipe. The text is never returned to the client.
+      take(chunk, "");
+    });
+    let settled = false;
+    let timer;
+    const finish = (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const lines = stdout.trim().split(/\n/).filter(Boolean);
+      const status = publicAutofillStatus(lines.pop() || "", code);
+      const ok =
+        code === 0 ||
+        status === "already_logged_in" ||
+        status.toLowerCase().includes("2fa") ||
+        status.toLowerCase().includes("awaiting") ||
+        status.startsWith("filled_");
+      resolve({ ok, status });
+    };
+    timer = setTimeout(() => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        /* already gone */
+      }
+      finish(-2);
+    }, 90000);
+    child.on("error", () => finish(-1));
+    child.on("close", (code) => finish(code ?? -1));
+  });
 }
 
 export function getGvDeskStatus() {
